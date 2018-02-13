@@ -21,8 +21,10 @@ Released under MIT licence.
 //LCD
 #include <Wire.h>
 #include <LCD03.h>
-//DHT
-#include "DHT.h"
+////DHT
+//#include "DHT.h"
+//SHT10
+#include <SHT1x.h>
 //EPROM
 #include <EEPROM.h>
 //Timers
@@ -70,10 +72,19 @@ bool raiseMode=false;
 bool movWhum;
 //instantiate lcd
 LCD03 lcd;
-//dht defines
-#define DHTPIN 2
-#define DHTTYPE DHT22
-DHT dht(DHTPIN, DHTTYPE);
+////dht defines
+//#define DHTPIN 2
+//#define DHTTYPE DHT22
+//DHT dht(DHTPIN, DHTTYPE);
+//
+//SHT10 Defines
+// Specify data and clock connections and instantiate SHT1x object
+// rifinire i pin per collegamento nuovo
+#define DATA  2
+#define CLOCK 3
+// voltage is optional, defaults to 5
+#define VOLTAGE 5
+SHT1x sht0(DATA, CLOCK, VOLTAGE);
 //EPROM
 int eeAddress = 0;
 struct Settings{
@@ -121,7 +132,7 @@ pinMode(Fridge, OUTPUT);
 pinMode(Humidifier, OUTPUT);
 pinMode(extFan, OUTPUT);
 pinMode(movFan, OUTPUT);
-dht.begin();  
+//dht.begin();  
 button.attachClick(click1);
 button.attachLongPressStart(longPressStart1);
 button.attachLongPressStop(longPressStop1);
@@ -580,11 +591,18 @@ if (h < HTD ){
 
 void tempSens(MillisTimer &mt){
   
-  fh = dht.readHumidity();
-  ft = dht.readTemperature();
+//  fh = dht.readHumidity();
+//  ft = dht.readTemperature();
+//  h=(int)fh;
+//  t=(int)ft;
+  sht0.requestTemperature();
+  ft = sht0.parseTemperatureC(sht0.readInTemperature());
+  sht0.requestHumidity();
+  //it is important to parse humidity AFTER reading in temperature
+  //since parsing formula adjusts using temperature
+  fh = sht0.parseHumidity(sht0.readInHumidity()); 
   h=(int)fh;
   t=(int)ft;
-
 }
 
 void backlitOn(){
