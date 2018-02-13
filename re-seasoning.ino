@@ -522,58 +522,62 @@ void FunctionalLoop(){
   int HTU = thresH+tollH;
   int HTD = thresH-tollH;
   int TT = thresT+tollT;
- 
+
+if(t!=0 && h!=0){
  if (t > TT){
   digitalWrite(Fridge, HIGH);
  } else{
   digitalWrite(Fridge, LOW);
 }
- if (h > HTU){
-  //digitalWrite(extFan, HIGH);
-  timerExtFanDur.start();
+if(extrEn==1){
+  if (h > HTU){
+  digitalWrite(extFan, HIGH);
  } else {
-  //this if i whant to stop timers non considering the timer 
-  //timerExtFanDur.stop();
-  //timerExtFanDur.reset();
+  digitalWrite(extFan, LOW);
  }
- if (h < HTD ){
-  timerHumDur.start();
+  }
+  
+  if(humEn==1){
+if (h < HTD ){
+  digitalWrite(Humidifier, HIGH);
  } else {
-  //this if i whant to stop timers non considering the timer 
-  //timerHumDur.stop();
-  //timerHumDur.reset();
+  digitalWrite(Humidifier, LOW); 
  }
-//  
+ 
+  }
+}
 // if (t > TT){
 //  digitalWrite(Fridge, HIGH);
 // } else{
 //  digitalWrite(Fridge, LOW);
 // }
-// if (h > HTU){
-//  digitalWrite(extFan, HIGH);
-// } else {
-//  digitalWrite(extFan, LOW);
-// }
-// if (h < HTD ){
+//  if(extrEn==1){
+//  if(timerExtFanDur.isRunning()){
+//    digitalWrite(extFan, HIGH);
+//  } else {
+//    digitalWrite(extFan, LOW);
+//  }
+//  }
+//  if(humEn==1){
+//   if(timerHumDur.isRunning()){ 
 //  digitalWrite(Humidifier, HIGH);
 // } else {
 //  digitalWrite(Humidifier, LOW); 
 // }
-//
-
-
 }
 
 void tempSens(MillisTimer &mt){
+  
   fh = dht.readHumidity();
   ft = dht.readTemperature();
   h=(int)fh;
   t=(int)ft;
- if (isnan(h) || isnan(t)) {
-    lcd.home(); 
-    lcd.print("Failed to read from DHT sensor!");
-    return;
-  }
+  
+// if (isnan(h) || isnan(t)) {
+//    lcd.home(); 
+//    lcd.print("Failed to read from DHT sensor!");
+//    return;
+//  }
 }
 
 void backlitOn(){
@@ -643,7 +647,7 @@ timerHumDur.setInterval(HumDurMillis);
 timerHumDur.expiredHandler(endRunHum);
 timerHumDur.setRepeats(1);
 //sensor read
-timerSensRead.setInterval(2000);
+timerSensRead.setInterval(4000);
 timerSensRead.expiredHandler(tempSens);
 timerSensRead.start();
 //Backlight timers
@@ -657,28 +661,28 @@ void Timers(){
   timerSensRead.run();
   timerFan.run();
   timerMovFanDur.run();
-  timerExtFanDur.run();
-  timerHumDur.run();
+  //timerExtFanDur.run();
+  //timerHumDur.run();
   if(timerMovFanDur.isRunning()){
     //Serial.println("moving fan on");
     digitalWrite(movFan, HIGH);
   } else{
     digitalWrite(movFan, LOW);
   }
-  if(extrEn==1){
-  if(timerExtFanDur.isRunning()){
-    digitalWrite(extFan, HIGH);
-  } else {
-    digitalWrite(extFan, LOW);
-  }
-  }
-  if(humEn==1){
-   if(timerHumDur.isRunning()){ 
-  digitalWrite(Humidifier, HIGH);
- } else {
-  digitalWrite(Humidifier, LOW); 
- }
-}
+//  if(extrEn==1){
+//  if(timerExtFanDur.isRunning()){
+//    digitalWrite(extFan, HIGH);
+//  } else {
+//    digitalWrite(extFan, LOW);
+//  }
+//  }
+//  if(humEn==1){
+//   if(timerHumDur.isRunning()){ 
+//  digitalWrite(Humidifier, HIGH);
+// } else {
+//  digitalWrite(Humidifier, LOW); 
+// }
+//}
 //Serial.println(timerFan.getRemainingTime());
 }
 
