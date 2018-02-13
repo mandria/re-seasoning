@@ -10,12 +10,28 @@ Released under MIT licence.
 // mi mancano:
 //          X- (dare una piccola tolleranza prima di muoversi)  -le variazioni dei valori solo al movimento dei pot 
 
-#define DEBUG
+//#define DEBUG
+#define WTCHDG
+
+//include all libraries
+//button
+#include "OneButton.h"
+//watchdog
+#include <avr/wdt.h>
+//LCD
+#include <Wire.h>
+#include <LCD03.h>
+//DHT
+#include "DHT.h"
+//EPROM
+#include <EEPROM.h>
+//Timers
+#include "MillisTimer.h"
 
 //potentiometers vars
-const int pot3Pin = A0;
-const int pot2Pin = A2;
-const int pot1Pin = A3;
+const byte pot3Pin = A0;
+const byte pot2Pin = A2;
+const byte pot1Pin = A3;
 int pot1Val = 0;
 int pot2Val = 0;
 int pot3Val = 0;
@@ -24,8 +40,7 @@ int pot2ValOld = 0;
 int pot3ValOld = 0;
 
 //button vars
-#include "OneButton.h"
-const int buttPin = 12;
+const byte buttPin = 12;
 OneButton button(buttPin, true);
 // menu
 //LV0 reading | LV1 temp menu | LV2 hum menu | LV3 repeat and duration | LV4 on off switch functions | LV5 writing parameters to eprom and get back to level 0
@@ -53,21 +68,13 @@ bool extrEn;
 bool mfanEn;
 bool raiseMode=false;
 bool movWhum;
-
-//Libraries and imports
-//watchdog
-#include <avr/wdt.h>
-//LCD
-#include <Wire.h>
-#include <LCD03.h>
+//instantiate lcd
 LCD03 lcd;
-//DHT
-#include "DHT.h"
+//dht defines
 #define DHTPIN 2
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 //EPROM
-#include <EEPROM.h>
 int eeAddress = 0;
 struct Settings{
 int thresT;
@@ -76,41 +83,38 @@ int tollT;
 int tollH;
 int MovFanTimer;
 int MovFanDur;
-int ExtFanDur;
-int HumDur;
 bool humEn;
 bool extrEn;
 bool mfanEn;
 bool movWhum;
 };
-//Timers
-#include "MillisTimer.h"
+
 //timers
 MillisTimer timerFan;
 MillisTimer timerMovFanDur;
-MillisTimer timerExtFanDur;
-MillisTimer timerHumDur;
 MillisTimer timerSensRead;
 MillisTimer timerBackLit;
+MillisTimer timerLcd;
+#ifdef WTCHDG
 MillisTimer timerWatchdog;
+#endif
 #ifdef DEBUG
   MillisTimer timerDebug;
    //Macros are usually in all capital letters.
   #define SPR(...)    Serial.print(__VA_ARGS__)     //DPRINT is a macro, debug print
   #define SPRLN(...)  Serial.println(__VA_ARGS__)   //DPRINTLN is a macro, debug print with new line
 #endif
-//timer interval internal air (in mS)
+//timer intervals
 int MovFanTimer;
 int MovFanDur;
-int ExtFanDur;
-int HumDur;
 unsigned long BackLitDur = 120000;
+int LcdWriteTime = 100;
 
 
 void setup() {
 #ifdef DEBUG
 Serial.begin(9600);
-Serial.println(F("SETUP ARDUINO IS STARTED"));
+Serial.println(F("SETUP ARDUINO IS RE/STARTED"));
 Serial.println(F("------------------------"));
 #endif
 pinMode(Fridge, OUTPUT);
@@ -129,20 +133,22 @@ loadSettings();
 TimersSetup();
 delay(5000);
 lcd.clear();
-lcd.noBacklight();
+backlitOn();
+#ifdef WTCHDG
 wdt_enable(WDTO_8S);
+#endif
 }
 
 void loop() {
   button.tick();
   readPots();
-  constMenu();
+  //constMenu();
   Timers();
   FunctionalLoop();
 }
 
 //function to display information on menu tabs
-void constMenu(){
+void constMenu(MillisTimer &mt){
   /////////////////////visualization data
     if(menuLevel==0){
     lcd.home();
@@ -212,7 +218,8 @@ void constMenu(){
   /////////////////////// HUMIDITY
   if(menuLevel==2){
     lcd.home();
-    lcd.print("TRHH HTOL   HDUR");
+    lcd.print("TRHH HTOL");
+    lcd.newLine();
     lcd.print(" ");
     if (thresH < 10){
       lcd.print("0");
@@ -228,16 +235,6 @@ void constMenu(){
       lcd.print(tollH);
     }
     lcd.print("%    ");
-    if(HumDur<10){
-      lcd.print("00");
-      lcd.print(HumDur);
-    } else if(HumDur<100){
-      lcd.print("0");
-      lcd.print(HumDur);
-    } else{
-      lcd.print(HumDur);
-    }
-    lcd.print("s");
   }
   /////////////////////// set repeating timers and duration
   if(menuLevel==3){
@@ -264,7 +261,7 @@ void constMenu(){
       lcd.print(MovFanDur);
     }
     lcd.print("  ");
-    if (movWhum == 1){
+    if (movWhum == 0){
       lcd.print("off");
     }else {
       lcd.print(" on");
@@ -301,32 +298,22 @@ void oneTimeMenu(){
   backlitOn();
   if(menuLevel==0){
     lcd.clear();
-    //lcd.home();
-    //lcd.print("Level0 reding sensor");
   }
   if(menuLevel==1){
     lcd.clear();
     readPotsInit();
-    //lcd.home();
-    //lcd.print("setting temp");
   }
   if(menuLevel==2){
     lcd.clear();
     readPotsInit();
-    //lcd.home();
-    //lcd.print("setting hum");
   }
   if(menuLevel==3){
     lcd.clear();
     readPotsInit();
-    //lcd.home();
-    //lcd.print("setting repetition");
   }
   if(menuLevel==4){
     lcd.clear();
     readPotsInit();
-    //lcd.home();
-    //lcd.print("switch on off");
   }
   if(menuLevel==5){
     lcd.clear();
@@ -355,8 +342,7 @@ if(menuLevel==2){
   pot1ValOld = map (pot1ValOld, 0, 1023, 0, 99);
   //hum toll %
   pot2ValOld = map (pot2ValOld, 0, 1023, 1, 10);
-  //hum dur Seconds
-  pot3ValOld = map (pot3ValOld, 0, 1023, 1, 120);
+
   
 }
 if(menuLevel==3){
@@ -411,8 +397,6 @@ if(menuLevel==2){
   pot1Val = map (pot1Val, 0, 1023, 0, 99);
   //hum toll
   pot2Val = map (pot2Val, 0, 1023, 1, 10);
-  //hum dur in seconds
-  pot3Val = map (pot3Val, 0, 1023, 1, 120);
   if(pot1Val!=pot1ValOld){
   thresH=pot1Val;
   pot1ValOld=pot1Val;
@@ -420,10 +404,6 @@ if(menuLevel==2){
   if(pot2Val!=pot2ValOld){
   tollH=pot2Val;
   pot2ValOld=pot2Val;
-  }
-  if(pot3Val!=pot3ValOld){
-  HumDur=pot3Val;
-  pot3ValOld=pot3Val;
   }
   
 }
@@ -496,6 +476,8 @@ void longPressStop1() {
 void doubleclick1(){
   backlitOn();
 }
+void(* resetFunc) (void) = 0;
+//declare reset function at address 0
 
 void saveSettings(){
    Settings Configuration{
@@ -505,8 +487,6 @@ void saveSettings(){
  tollH,
  MovFanTimer,
  MovFanDur,
- ExtFanDur,
- HumDur,
  humEn,
  extrEn,
  mfanEn,
@@ -515,7 +495,16 @@ void saveSettings(){
 EEPROM.put(eeAddress, Configuration);
 lcd.clear();
 lcd.print("settings saved");
+delay(1500);
+lcd.clear();
+lcd.print("rebooting now");
+delay(1500);
+lcd.clear();
+lcd.noBacklight();
+delay(500);
+resetFunc();
 }
+
 
 void loadSettings(){
   Settings Configuration;
@@ -526,8 +515,6 @@ void loadSettings(){
   tollH=Configuration.tollH;
   MovFanTimer=Configuration.MovFanTimer;
   MovFanDur=Configuration.MovFanDur;
-  ExtFanDur=Configuration.ExtFanDur;
-  HumDur=Configuration.HumDur;
   humEn=Configuration.humEn;
   extrEn=Configuration.extrEn;
   mfanEn=Configuration.mfanEn;
@@ -562,41 +549,33 @@ if(extrEn==1){
  } else {
   digitalWrite(extFan, LOW);
  }
-  }
+ }else{
+  digitalWrite(extFan, LOW);
+ }
   
   if(humEn==1){
 if (h < HTD ){
   digitalWrite(Humidifier, HIGH);
-  if(movWhum==true){
+  if(movWhum==true && timerMovFanDur.isRunning()==0){
   digitalWrite(movFan, HIGH);  
+  } else if(movWhum==false && timerMovFanDur.isRunning()==0){
+  digitalWrite(movFan, LOW);
   }
  } else {
   digitalWrite(Humidifier, LOW);
-  if(movWhum==true){
+  if(movWhum==true && timerMovFanDur.isRunning()==0){
   digitalWrite(movFan, LOW);
   }
+//  } else if (movWhum==false && timerMovFanDur.isRunning()==0){
+//  digitalWrite(movFan, LOW);
+//  }
  }
- 
-  }
+} else {
+  digitalWrite(Humidifier, LOW);
 }
-// if (t > TT){
-//  digitalWrite(Fridge, HIGH);
-// } else{
-//  digitalWrite(Fridge, LOW);
-// }
-//  if(extrEn==1){
-//  if(timerExtFanDur.isRunning()){
-//    digitalWrite(extFan, HIGH);
-//  } else {
-//    digitalWrite(extFan, LOW);
-//  }
-//  }
-//  if(humEn==1){
-//   if(timerHumDur.isRunning()){ 
-//  digitalWrite(Humidifier, HIGH);
-// } else {
-//  digitalWrite(Humidifier, LOW); 
-// }
+//endo of if temp reading != 0 
+}
+//end functional loop
 }
 
 void tempSens(MillisTimer &mt){
@@ -605,12 +584,7 @@ void tempSens(MillisTimer &mt){
   ft = dht.readTemperature();
   h=(int)fh;
   t=(int)ft;
-  
-// if (isnan(h) || isnan(t)) {
-//    lcd.home(); 
-//    lcd.print("Failed to read from DHT sensor!");
-//    return;
-//  }
+
 }
 
 void backlitOn(){
@@ -636,21 +610,14 @@ void endRunMovFan(MillisTimer &mt){
   timerFan.start();
 }
 
-void endRunExtFan(MillisTimer &mt){
-  timerExtFanDur.stop();
-  timerExtFanDur.reset();
-}
-void endRunHum(MillisTimer &mt){
-  timerHumDur.stop();
-  timerHumDur.reset();
-}
-
+#ifdef WTCHDG
 void resetWatchdog(MillisTimer &mt){
   wdt_reset();
   #ifdef DEBUG
   SPRLN(F("watchdog resetted in time"));
   #endif
 }
+#endif
 
 #ifdef DEBUG
 int freeRam () 
@@ -660,10 +627,7 @@ int freeRam ()
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
 }
 void runDebug(MillisTimer &mt){
-  SPR(F("DEBUG PRINT - millis: "));
-  SPRLN(millis());
-  SPR(F("free memory: "));
-  SPRLN(freeRam());
+  SPRLN(F("DEBUG PRINT"));
   SPR(F("float temperature: "));
   SPR(ft);
   SPR(F(" integer temperature: "));
@@ -688,7 +652,17 @@ void runDebug(MillisTimer &mt){
   SPRLN(mfanEn);  
   SPR(F("movFAn is running?: "));
   SPRLN(timerMovFanDur.isRunning());
-  SPR(F("free memory byte: "));
+  SPRLN(F("--Utils--")); 
+  SPR(F("Current millis: "));
+  SPRLN(millis());
+  #ifdef WTCHDG
+  SPRLN(F("Watchdog is enabled:  YES"));
+  #else
+  SPRLN(F("Watchdog is enabled:  NO"));
+  #endif
+  SPR(F("Free buffer of LCD: "));
+  SPRLN(lcd.bufferFreeBytes());
+  SPR(F("Free memory byte: "));
   SPRLN(freeRam());
   SPRLN(F("--------------"));  
 }
@@ -700,17 +674,16 @@ void TimersSetup(){
   timerDebug.expiredHandler(runDebug);
   timerDebug.start();
   #endif
+  #ifdef WTCHDG
   timerWatchdog.setInterval(6000);
   timerWatchdog.expiredHandler(resetWatchdog);
   timerWatchdog.start();
-//timer interval internal air (in mS)
-//int MovFanTimer;
-//int MovFanDur;
-//int ExtFanDur;
-//int BackLitDur = 15000;
-//bool humEn;
-//bool extrEn;
-//bool mfanEn;
+  #endif
+  
+  timerLcd.setInterval(LcdWriteTime);
+  timerLcd.expiredHandler(constMenu);
+  timerLcd.start();
+
 //timerr movement fan duration with conversion from minutes to millis
 unsigned long MovFanTimerMillis=MovFanTimer*60000;
 timerFan.setInterval(MovFanTimerMillis);
@@ -726,18 +699,6 @@ timerMovFanDur.setInterval(MovFanDurMillis);
 timerMovFanDur.expiredHandler(endRunMovFan);
 timerMovFanDur.setRepeats(1);
 
-//extraction duration
-unsigned long ExtFanDurMillis=(unsigned long)ExtFanDur*1000;
-timerExtFanDur.setInterval(ExtFanDurMillis);
-timerExtFanDur.expiredHandler(endRunExtFan);
-timerExtFanDur.setRepeats(1);
-
-//humidifier duration
-unsigned long HumDurMillis=(unsigned long)HumDur*1000;
-timerHumDur.setInterval(HumDurMillis);
-timerHumDur.expiredHandler(endRunHum);
-timerHumDur.setRepeats(1);
-
 //sensor read
 timerSensRead.setInterval(4000);
 timerSensRead.expiredHandler(tempSens);
@@ -752,34 +713,14 @@ void Timers(){
   #ifdef DEBUG
   timerDebug.run();
   #endif
+  #ifdef WTCHDG
   timerWatchdog.run();
+  #endif
+  timerLcd.run();
   timerBackLit.run();
   timerSensRead.run();
   timerFan.run();
   timerMovFanDur.run();
-  //timerExtFanDur.run();
-  //timerHumDur.run();
-//  if(timerMovFanDur.isRunning()){
-//    //Serial.println("moving fan on");
-//    digitalWrite(movFan, HIGH);
-//  } else{
-//    digitalWrite(movFan, LOW);
-//  }
-//  if(extrEn==1){
-//  if(timerExtFanDur.isRunning()){
-//    digitalWrite(extFan, HIGH);
-//  } else {
-//    digitalWrite(extFan, LOW);
-//  }
-//  }
-//  if(humEn==1){
-//   if(timerHumDur.isRunning()){ 
-//  digitalWrite(Humidifier, HIGH);
-// } else {
-//  digitalWrite(Humidifier, LOW); 
-// }
-//}
-//Serial.println(timerFan.getRemainingTime());
 }
 
 
