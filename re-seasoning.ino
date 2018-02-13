@@ -9,8 +9,7 @@ Released under MIT licence.
 ///////
 // mi mancano:
 //            -i timers
-//            -il get/put sulla eprom
-//          X  -le variazioni dei valori solo al movimento dei pot 
+//          X- (dare una piccola tolleranza prima di muoversi)  -le variazioni dei valori solo al movimento dei pot 
 
 //potentiometers vars
 const int pot3Pin = A0;
@@ -65,20 +64,34 @@ DHT dht(DHTPIN, DHTTYPE);
 //EPROM
 #include <EEPROM.h>
 int eeAddress = 0;
+struct Settings{
+int thresT;
+int thresH;
+int tollT;
+int tollH;
+int MovFanTimer;
+int MovFanDur;
+int ExtFanDur;
+int HumDur;
+bool humEn;
+bool extrEn;
+bool mfanEn;
+};
 //Timers
-#include <elapsedMillis.h>
+#include "MillisTimer.h"
 //timers
-elapsedMillis timerFan;
-elapsedMillis timerMovFanDur;
-elapsedMillis timerExtFanDur;
-elapsedMillis timerSensRead;
-elapsedMillis timerBackLit;
+MillisTimer timerFan;
+MillisTimer timerMovFanDur;
+MillisTimer timerExtFanDur;
+MillisTimer timerHumDur;
+MillisTimer timerSensRead;
+MillisTimer timerBackLit;
 //timer interval internal air (in mS)
 int MovFanTimer;
 int MovFanDur;
 int ExtFanDur;
-int BackLitDur = 5000;
-// verificare come tenere accesa la ventola per tot secondi dopo che il timer ha raggiunto il suo valore
+int HumDur;
+unsigned long BackLitDur = 60000;
 
 
 void setup() {
@@ -92,25 +105,22 @@ dht.begin();
 button.attachClick(click1);
 button.attachLongPressStart(longPressStart1);
 button.attachLongPressStop(longPressStop1);
-button.attachDuringLongPress(longPress1);
 lcd.begin(16, 2);
 lcd.backlight();
 lcd.print("Loading         Configuration...");
-delay(2000);
+loadSettings();
+TimersSetup();
+delay(5000);
 lcd.clear();
+lcd.noBacklight();
 }
 
 void loop() {
   button.tick();
   readPots();
   constMenu();
-
-//  if (timer0 > interval) {
-//    timer0 -= interval; //reset the timer
-//    // read the current state and write the opposite
-//    digitalWrite(led, !ledPin);
-//  }
-
+  Timers();
+  //Serial.println(timerBackLit.getRemainingTime());
 }
 
 //function to display information on menu tabs
@@ -134,8 +144,9 @@ void constMenu(){
       lcd.print(h);
     }
     lcd.print("% ");
-    int seconds=timerMovFanDur%60000/1000;
-    int minutes=timerMovFanDur/1000/60;
+    if(mfanEn==true){
+    int seconds=59;//timerMovFanDur%60000/1000;
+    int minutes=10;//timerMovFanDur/1000/60;
     if (minutes < 10){
       lcd.print("00");
       lcd.print(minutes);
@@ -152,7 +163,9 @@ void constMenu(){
     } else {
       lcd.print(seconds);
     }
-    //lcd.print(timerMovFanDur);
+    } else {
+      lcd.print("   off");
+    }
   }
   ///////////////////// TEMPERATURE
   if(menuLevel==1){
@@ -180,7 +193,7 @@ void constMenu(){
   /////////////////////// HUMIDITY
   if(menuLevel==2){
     lcd.home();
-    lcd.print("TRHH HTOL       ");
+    lcd.print("TRHH HTOL   HDUR");
     lcd.print(" ");
     if (thresH < 10){
       lcd.print("0");
@@ -195,7 +208,17 @@ void constMenu(){
     } else{
       lcd.print(tollH);
     }
-    lcd.print("%  ");
+    lcd.print("%    ");
+    if(HumDur<10){
+      lcd.print("00");
+      lcd.print(HumDur);
+    } else if(HumDur<100){
+      lcd.print("0");
+      lcd.print(HumDur);
+    } else{
+      lcd.print(HumDur);
+    }
+    lcd.print("s");
   }
   /////////////////////// set repeating timers and duration
   if(menuLevel==3){
@@ -260,6 +283,7 @@ void constMenu(){
 }
 //function to trigger one time action from menu changes
 void oneTimeMenu(){
+  backlitOn();
   if(menuLevel==0){
     lcd.clear();
     //lcd.home();
@@ -302,24 +326,22 @@ if (menuLevel >= 1 && menuLevel <= 4){
 pot1ValOld = analogRead(pot1Pin);
 pot2ValOld = analogRead(pot2Pin);
 pot3ValOld = analogRead(pot3Pin);
-//debug
-//Serial.println(menuLevel);
-//Serial.println("reading pots");
+
 if(menuLevel==1){
   //temperature reading map
   //temp
   pot1ValOld = map (pot1ValOld, 0, 1023, 1, 30);
   //temp toll
   pot2ValOld = map (pot2ValOld, 0, 1023, 1, 10);
-  //Serial.println(pot1Val);
-  //Serial.println(pot2Val);
 }
 if(menuLevel==2){
   //Humidity reading map
-  //hum
+  //hum %
   pot1ValOld = map (pot1ValOld, 0, 1023, 0, 99);
-  //hum toll
+  //hum toll %
   pot2ValOld = map (pot2ValOld, 0, 1023, 1, 10);
+  //hum dur Seconds
+  pot3ValOld = map (pot3ValOld, 0, 1023, 1, 120);
   
 }
 if(menuLevel==3){
@@ -351,9 +373,6 @@ pot1Val = analogRead(pot1Pin);
 pot2Val = analogRead(pot2Pin);
 pot3Val = analogRead(pot3Pin);
 
-//debug
-//Serial.println(menuLevel);
-//Serial.println("reading pots");
 if(menuLevel==1){
   //temperature reading map
   //temp
@@ -369,8 +388,7 @@ if(menuLevel==1){
   tollT=pot2Val;
   pot2ValOld=pot2Val;
   }
-  //Serial.println(pot1Val);
-  //Serial.println(pot2Val);
+  
 }
 if(menuLevel==2){
   //Humidity reading map
@@ -378,6 +396,8 @@ if(menuLevel==2){
   pot1Val = map (pot1Val, 0, 1023, 0, 99);
   //hum toll
   pot2Val = map (pot2Val, 0, 1023, 1, 10);
+  //hum dur in seconds
+  pot3Val = map (pot3Val, 0, 1023, 1, 120);
   if(pot1Val!=pot1ValOld){
   thresH=pot1Val;
   pot1ValOld=pot1Val;
@@ -385,6 +405,10 @@ if(menuLevel==2){
   if(pot2Val!=pot2ValOld){
   tollH=pot2Val;
   pot2ValOld=pot2Val;
+  }
+  if(pot3Val!=pot3ValOld){
+  HumDur=pot3Val;
+  pot3ValOld=pot3Val;
   }
   
 }
@@ -446,17 +470,50 @@ void click1() {
 void longPressStart1() {
   menuLevel=5;
   oneTimeMenu();
-} // longPressStart1
+  saveSettings();
+} 
 
-// This function will be called often, while the button1 is pressed for a long time.
-void longPress1() {
-  Serial.println("Button 1 longPress...");
-} // longPress1
-
-// This function will be called once, when the button1 is released after beeing pressed for a long time.
 void longPressStop1() {
-  Serial.println("Button 1 longPress stop");
-} // longPressStop1
+  menuLevel=0;
+  TimersSetup();
+}
+
+void saveSettings(){
+   Settings Configuration{
+ thresT,
+ thresH,
+ tollT,
+ tollH,
+ MovFanTimer,
+ MovFanDur,
+ ExtFanDur,
+ HumDur,
+ humEn,
+ extrEn,
+ mfanEn
+};
+EEPROM.put(eeAddress, Configuration);
+lcd.clear();
+lcd.print("settings saved");
+}
+
+void loadSettings(){
+  Settings Configuration;
+  EEPROM.get(eeAddress, Configuration);
+  thresT=Configuration.thresT;
+  thresH=Configuration.thresH;
+  tollT=Configuration.tollT;
+  tollH=Configuration.tollH;
+  MovFanTimer=Configuration.MovFanTimer;
+  MovFanDur=Configuration.MovFanDur;
+  ExtFanDur=Configuration.ExtFanDur;
+  HumDur=Configuration.HumDur;
+  humEn=Configuration.humEn;
+  extrEn=Configuration.extrEn;
+  mfanEn=Configuration.mfanEn;
+}
+
+
 
 
 
@@ -464,15 +521,7 @@ void FunctionalLoop(){
   int HTU = thresH+tollH;
   int HTD = thresH-tollH;
   int TT = thresT+tollT;
-  fh = dht.readHumidity();
-  ft = dht.readTemperature();
-  h=(int)fh;
-  t=(int)ft;
- if (isnan(h) || isnan(t)) {
-    lcd.home(); 
-    lcd.print("Failed to read from DHT sensor!");
-    return;
-  }
+ 
   
  if (t > TT){
   digitalWrite(Fridge, HIGH);
@@ -492,8 +541,86 @@ void FunctionalLoop(){
 
 }
 
-void Timers(){
-  
+void tempSens(MillisTimer &mt){
+  fh = dht.readHumidity();
+  ft = dht.readTemperature();
+  h=(int)fh;
+  t=(int)ft;
+ if (isnan(h) || isnan(t)) {
+    lcd.home(); 
+    lcd.print("Failed to read from DHT sensor!");
+    return;
+  }
+}
+
+void backlitOn(){
+  lcd.backlight();
+  timerBackLit.reset();
+  timerBackLit.start();
+  //Serial.print(timerBackLit.getRemainingTime());
+}
+void backlitOff(MillisTimer &mt){
+  timerBackLit.stop();
+  lcd.noBacklight();
 
 }
+void runMovFan(MillisTimer &mt){
+  timerMovFanDur.reset();
+  timerMovFanDur.start();
+
+}
+
+void TimersSetup(){
+//timer interval internal air (in mS)
+//int MovFanTimer;
+//int MovFanDur;
+//int ExtFanDur;
+//int BackLitDur = 15000;
+//bool humEn;
+//bool extrEn;
+//bool mfanEn;
+//timerr movement fan duration with conversion from minutes to millis
+unsigned long MovFanTimerMillis=MovFanTimer*60000;
+timerFan.setInterval(MovFanTimerMillis);
+timerFan.expiredHandler(runMovFan);
+if(mfanEn==1){
+  Serial.println("moving fan enabled");
+  timerFan.reset();
+  timerFan.start();
+}
+//from seconds to millis
+unsigned long MovFanDurMillis=MovFanDur*1000;
+timerMovFanDur.setInterval(MovFanDurMillis);
+timerMovFanDur.setRepeats(1);
+
+//extraction duration
+unsigned long ExtFanDurMillis=ExtFanDur*1000;
+timerExtFanDur.setInterval(ExtFanDurMillis);
+//humidifier duration
+unsigned long HumDurMillis=HumDur*1000;
+timerHumDur.setInterval(HumDurMillis);
+//sensor read
+timerSensRead.setInterval(2000);
+timerSensRead.expiredHandler(tempSens);
+timerSensRead.start();
+//Backlight timers
+timerBackLit.setInterval(BackLitDur);
+timerBackLit.expiredHandler(backlitOff);
+timerBackLit.setRepeats(1);
+}
+
+void Timers(){
+  timerBackLit.run();
+  timerSensRead.run();
+  timerFan.run();
+  timerMovFanDur.run();
+  if(timerMovFanDur.isRunning()){
+    Serial.println("moving fan on");
+    digitalWrite(movFan, HIGH);
+  } else{
+    digitalWrite(movFan, LOW);
+  }
+Serial.println(timerFan.getRemainingTime());
+}
+
 
