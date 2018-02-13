@@ -10,7 +10,7 @@ Released under MIT licence.
 // mi mancano:
 //            -i timers
 //            -il get/put sulla eprom
-//            -le variazioni dei valori solo al movimento dei pot
+//          X  -le variazioni dei valori solo al movimento dei pot 
 
 //potentiometers vars
 const int pot3Pin = A0;
@@ -22,6 +22,7 @@ int pot3Val = 0;
 int pot1ValOld = 0;
 int pot2ValOld = 0;
 int pot3ValOld = 0;
+
 //button vars
 #include "OneButton.h"
 const int buttPin = 12;
@@ -47,9 +48,9 @@ int thresH; // =0?; 3% tollerance suggested
 int tollT; //tolerrance temperature
 int tollH; //tollerance humidity
 //
-bool hum;
-bool extr;
-bool mfan;
+bool humEn;
+bool extrEn;
+bool mfanEn;
 
 //Libraries and imports
 //LCD
@@ -159,109 +160,97 @@ void constMenu(){
     lcd.print("TRHT TTOL       ");
     if (pot1Val < 10){
       lcd.print("0");
-      lcd.print(pot1Val);
+      lcd.print(thresT);
     } else{
-      lcd.print(pot1Val);
+      lcd.print(thresT);
     }
     lcd.print((char)223);
     lcd.print("C ");
     if (pot2Val < 10){
       lcd.print("0");
-      lcd.print(pot2Val);
+      lcd.print(tollT);
     } else{
-      lcd.print(pot2Val);
+      lcd.print(tollT);
     }
     lcd.print((char)223);
     lcd.print("C  ");
     //set var from pot
-    thresT=pot1Val;
-    tollT=pot2Val;
+    
   }
   /////////////////////// HUMIDITY
   if(menuLevel==2){
     lcd.home();
     lcd.print("TRHH HTOL       ");
     lcd.print(" ");
-    if (pot1Val < 10){
+    if (thresH < 10){
       lcd.print("0");
-      lcd.print(pot1Val);
+      lcd.print(thresH);
     } else{
-      lcd.print(pot1Val);
+      lcd.print(thresH);
     }
     lcd.print("% ");
-    if (pot2Val < 10){
+    if (tollH < 10){
       lcd.print("0");
-      lcd.print(pot2Val);
+      lcd.print(tollH);
     } else{
-      lcd.print(pot2Val);
+      lcd.print(tollH);
     }
     lcd.print("%  ");
-    //set var from pot
-    thresH=pot1Val;
-    tollH=pot2Val;
   }
   /////////////////////// set repeating timers and duration
   if(menuLevel==3){
     lcd.home();
     lcd.print("MVTI MVDR EXTFDR");
     lcd.print("m");
-    if (pot1Val < 10){
+    if (MovFanTimer < 10){
       lcd.print("00");
-      lcd.print(pot1Val);
-    }else if(pot1Val < 100){
+      lcd.print(MovFanTimer);
+    }else if(MovFanTimer < 100){
       lcd.print("0");
-      lcd.print(pot1Val);
+      lcd.print(MovFanTimer);
     } else{
-      lcd.print(pot1Val);
+      lcd.print(MovFanTimer);
     }
     lcd.print("  s");
-    if (pot2Val < 10){
+    if (MovFanDur < 10){
       lcd.print("00");
-      lcd.print(pot2Val);
-    } else if(pot2Val < 100){
+      lcd.print(MovFanDur);
+    } else if(MovFanDur < 100){
       lcd.print("0");
-      lcd.print(pot2Val);
+      lcd.print(MovFanDur);
     } else{
-      lcd.print(pot2Val);
+      lcd.print(MovFanDur);
     }
     lcd.print("  s");
-    if (pot3Val < 10){
+    if (ExtFanDur < 10){
       lcd.print("00");
-      lcd.print(pot3Val);
-    }else if(pot3Val < 100){
+      lcd.print(ExtFanDur);
+    }else if(ExtFanDur < 100){
       lcd.print("0");
-      lcd.print(pot3Val);
+      lcd.print(ExtFanDur);
     } else{
-      lcd.print(pot3Val);
+      lcd.print(ExtFanDur);
     }
-    //set var from pot
-    MovFanTimer=pot1Val;
-    MovFanDur=pot2Val;
-    ExtFanDur=pot3Val;
   }
   ///////////////////////
   if(menuLevel==4){
     lcd.home();
     lcd.print(" HUM  EXTF  MFAN");
-    if(pot1Val==0){
+    if(humEn==0){
       lcd.print(" off"); 
     } else {
       lcd.print("  on"); 
     }
-    if(pot2Val==0){
+    if(extrEn==0){
       lcd.print("   off"); 
     } else {
       lcd.print("    on"); 
     }
-    if(pot3Val==0){
+    if(mfanEn==0){
       lcd.print("   off"); 
     } else {
       lcd.print("    on"); 
     }
-   hum=pot1Val;
-   extr=pot2Val;
-   mfan=pot3Val;
-    
   }
   ///////////////////////
   if(menuLevel==5){
@@ -278,21 +267,25 @@ void oneTimeMenu(){
   }
   if(menuLevel==1){
     lcd.clear();
+    readPotsInit();
     //lcd.home();
     //lcd.print("setting temp");
   }
   if(menuLevel==2){
     lcd.clear();
+    readPotsInit();
     //lcd.home();
     //lcd.print("setting hum");
   }
   if(menuLevel==3){
     lcd.clear();
+    readPotsInit();
     //lcd.home();
     //lcd.print("setting repetition");
   }
   if(menuLevel==4){
     lcd.clear();
+    readPotsInit();
     //lcd.home();
     //lcd.print("switch on off");
   }
@@ -303,17 +296,61 @@ void oneTimeMenu(){
   }
 }
 
-void readPots(){
-
-
+void readPotsInit(){
 if (menuLevel >= 1 && menuLevel <= 4){
-if(abs(pot1Val-pot1ValOld)>2){
-  pot1Valold=pot1Val;
-  Serial.print("Value changed");
+
+pot1ValOld = analogRead(pot1Pin);
+pot2ValOld = analogRead(pot2Pin);
+pot3ValOld = analogRead(pot3Pin);
+//debug
+//Serial.println(menuLevel);
+//Serial.println("reading pots");
+if(menuLevel==1){
+  //temperature reading map
+  //temp
+  pot1ValOld = map (pot1ValOld, 0, 1023, 1, 30);
+  //temp toll
+  pot2ValOld = map (pot2ValOld, 0, 1023, 1, 10);
+  //Serial.println(pot1Val);
+  //Serial.println(pot2Val);
 }
+if(menuLevel==2){
+  //Humidity reading map
+  //hum
+  pot1ValOld = map (pot1ValOld, 0, 1023, 0, 99);
+  //hum toll
+  pot2ValOld = map (pot2ValOld, 0, 1023, 1, 10);
+  
+}
+if(menuLevel==3){
+  //repeat and duration
+  //mov fan repeat timer from 1 to 30 min (x * 60 *1000 = x *60000)
+  pot1ValOld = map (pot1ValOld, 0, 1023, 1, 60);
+  //mov fan duration in seconds
+  pot2ValOld = map (pot2ValOld, 0, 1023, 5, 120);
+  //ext fan duration in seconds
+  pot3ValOld = map (pot3ValOld, 0, 1023, 5, 120);
+  
+}
+if(menuLevel==4){
+ //I/O outputs
+  //HUM IO
+  pot1ValOld = map (pot1ValOld, 0, 512, 0, 1);
+  //ETRACT FAN
+  pot2ValOld = map (pot2ValOld, 0, 512, 0, 1);
+  //MOV FAN
+  pot3ValOld = map (pot3ValOld, 0, 512, 0, 1);
+   
+}
+}
+}
+
+void readPots(){
+if (menuLevel >= 1 && menuLevel <= 4){
 pot1Val = analogRead(pot1Pin);
 pot2Val = analogRead(pot2Pin);
 pot3Val = analogRead(pot3Pin);
+
 //debug
 //Serial.println(menuLevel);
 //Serial.println("reading pots");
@@ -323,6 +360,15 @@ if(menuLevel==1){
   pot1Val = map (pot1Val, 0, 1023, 1, 30);
   //temp toll
   pot2Val = map (pot2Val, 0, 1023, 1, 10);
+  //check if value changed
+  if(pot1Val!=pot1ValOld){
+  thresT=pot1Val;
+  pot1ValOld=pot1Val;
+  }
+  if(pot2Val!=pot2ValOld){
+  tollT=pot2Val;
+  pot2ValOld=pot2Val;
+  }
   //Serial.println(pot1Val);
   //Serial.println(pot2Val);
 }
@@ -332,6 +378,14 @@ if(menuLevel==2){
   pot1Val = map (pot1Val, 0, 1023, 0, 99);
   //hum toll
   pot2Val = map (pot2Val, 0, 1023, 1, 10);
+  if(pot1Val!=pot1ValOld){
+  thresH=pot1Val;
+  pot1ValOld=pot1Val;
+  }
+  if(pot2Val!=pot2ValOld){
+  tollH=pot2Val;
+  pot2ValOld=pot2Val;
+  }
   
 }
 if(menuLevel==3){
@@ -342,7 +396,18 @@ if(menuLevel==3){
   pot2Val = map (pot2Val, 0, 1023, 5, 120);
   //ext fan duration in seconds
   pot3Val = map (pot3Val, 0, 1023, 5, 120);
-  
+  if(pot1Val!=pot1ValOld){
+  MovFanTimer=pot1Val;
+  pot1ValOld=pot1Val;
+  }
+  if(pot2Val!=pot2ValOld){
+  MovFanDur=pot2Val;
+  pot2ValOld=pot2Val;
+  }
+  if(pot3Val!=pot3ValOld){
+  ExtFanDur=pot3Val;
+  pot3ValOld=pot3Val;
+  }
 }
 if(menuLevel==4){
  //I/O outputs
@@ -352,11 +417,22 @@ if(menuLevel==4){
   pot2Val = map (pot2Val, 0, 512, 0, 1);
   //MOV FAN
   pot3Val = map (pot3Val, 0, 512, 0, 1);
-   
+  if(pot1Val!=pot1ValOld){
+  humEn=pot1Val;
+  pot1ValOld=pot1Val;
+  }
+  if(pot2Val!=pot2ValOld){
+  extrEn=pot2Val;
+  pot2ValOld=pot2Val;
+  }
+  if(pot3Val!=pot3ValOld){
+  mfanEn=pot3Val;
+  pot3ValOld=pot3Val;
+  }
+  
 }
 }
 }
-
 
 void click1() {    
   if(menuLevel <= 3){
