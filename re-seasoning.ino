@@ -91,7 +91,7 @@ int MovFanTimer;
 int MovFanDur;
 int ExtFanDur;
 int HumDur;
-unsigned long BackLitDur = 60000;
+unsigned long BackLitDur = 120000;
 
 
 void setup() {
@@ -120,7 +120,7 @@ void loop() {
   readPots();
   constMenu();
   Timers();
-  //Serial.println(timerBackLit.getRemainingTime());
+  FunctionalLoop();
 }
 
 //function to display information on menu tabs
@@ -145,8 +145,9 @@ void constMenu(){
     }
     lcd.print("% ");
     if(mfanEn==true){
-    int seconds=59;//timerMovFanDur%60000/1000;
-    int minutes=10;//timerMovFanDur/1000/60;
+    unsigned long countdown=timerFan.getRemainingTime();
+    int seconds=countdown%60000/1000;
+    int minutes=countdown/1000/60;
     if (minutes < 10){
       lcd.print("00");
       lcd.print(minutes);
@@ -522,22 +523,44 @@ void FunctionalLoop(){
   int HTD = thresH-tollH;
   int TT = thresT+tollT;
  
-  
  if (t > TT){
   digitalWrite(Fridge, HIGH);
  } else{
   digitalWrite(Fridge, LOW);
- }
+}
  if (h > HTU){
-  digitalWrite(extFan, HIGH);
+  //digitalWrite(extFan, HIGH);
+  timerExtFanDur.start();
  } else {
-  digitalWrite(extFan, LOW);
+  //this if i whant to stop timers non considering the timer 
+  //timerExtFanDur.stop();
+  //timerExtFanDur.reset();
  }
  if (h < HTD ){
-  digitalWrite(Humidifier, HIGH);
+  timerHumDur.start();
  } else {
-  digitalWrite(Humidifier, LOW); 
+  //this if i whant to stop timers non considering the timer 
+  //timerHumDur.stop();
+  //timerHumDur.reset();
  }
+//  
+// if (t > TT){
+//  digitalWrite(Fridge, HIGH);
+// } else{
+//  digitalWrite(Fridge, LOW);
+// }
+// if (h > HTU){
+//  digitalWrite(extFan, HIGH);
+// } else {
+//  digitalWrite(extFan, LOW);
+// }
+// if (h < HTD ){
+//  digitalWrite(Humidifier, HIGH);
+// } else {
+//  digitalWrite(Humidifier, LOW); 
+// }
+//
+
 
 }
 
@@ -565,9 +588,23 @@ void backlitOff(MillisTimer &mt){
 
 }
 void runMovFan(MillisTimer &mt){
+  timerFan.stop();
   timerMovFanDur.reset();
   timerMovFanDur.start();
 
+}
+void endRunMovFan(MillisTimer &mt){
+  timerFan.reset();
+  timerFan.start();
+}
+
+void endRunExtFan(MillisTimer &mt){
+  timerExtFanDur.stop();
+  timerExtFanDur.reset();
+}
+void endRunHum(MillisTimer &mt){
+  timerHumDur.stop();
+  timerHumDur.reset();
 }
 
 void TimersSetup(){
@@ -584,21 +621,27 @@ unsigned long MovFanTimerMillis=MovFanTimer*60000;
 timerFan.setInterval(MovFanTimerMillis);
 timerFan.expiredHandler(runMovFan);
 if(mfanEn==1){
-  Serial.println("moving fan enabled");
+  //Serial.println("moving fan enabled");
   timerFan.reset();
   timerFan.start();
 }
 //from seconds to millis
 unsigned long MovFanDurMillis=MovFanDur*1000;
 timerMovFanDur.setInterval(MovFanDurMillis);
+timerMovFanDur.expiredHandler(endRunMovFan);
 timerMovFanDur.setRepeats(1);
 
 //extraction duration
 unsigned long ExtFanDurMillis=ExtFanDur*1000;
 timerExtFanDur.setInterval(ExtFanDurMillis);
+timerExtFanDur.expiredHandler(endRunExtFan);
+timerExtFanDur.setRepeats(1);
+
 //humidifier duration
 unsigned long HumDurMillis=HumDur*1000;
 timerHumDur.setInterval(HumDurMillis);
+timerHumDur.expiredHandler(endRunHum);
+timerHumDur.setRepeats(1);
 //sensor read
 timerSensRead.setInterval(2000);
 timerSensRead.expiredHandler(tempSens);
@@ -614,13 +657,29 @@ void Timers(){
   timerSensRead.run();
   timerFan.run();
   timerMovFanDur.run();
+  timerExtFanDur.run();
+  timerHumDur.run();
   if(timerMovFanDur.isRunning()){
-    Serial.println("moving fan on");
+    //Serial.println("moving fan on");
     digitalWrite(movFan, HIGH);
   } else{
     digitalWrite(movFan, LOW);
   }
-Serial.println(timerFan.getRemainingTime());
+  if(extrEn==1){
+  if(timerExtFanDur.isRunning()){
+    digitalWrite(extFan, HIGH);
+  } else {
+    digitalWrite(extFan, LOW);
+  }
+  }
+  if(humEn==1){
+   if(timerHumDur.isRunning()){ 
+  digitalWrite(Humidifier, HIGH);
+ } else {
+  digitalWrite(Humidifier, LOW); 
+ }
+}
+//Serial.println(timerFan.getRemainingTime());
 }
 
 
