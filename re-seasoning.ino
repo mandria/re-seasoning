@@ -29,6 +29,14 @@ Released under MIT licence.
 #include <EEPROM.h>
 //Timers
 #include "MillisTimer.h"
+//bridge
+#include <Bridge.h>
+#include <BridgeServer.h>
+#include <BridgeClient.h>
+
+// Listen on default port 5555, the webserver on the Yún
+// will forward there all the HTTP requests for us.
+BridgeServer server;
 
 //potentiometers vars
 const byte pot3Pin = A0;
@@ -148,6 +156,10 @@ backlitOn();
 #ifdef WTCHDG
 wdt_enable(WDTO_8S);
 #endif
+// Listen for incoming connection only from localhost
+// (no one from the external network could connect)
+server.listenOnLocalhost();
+server.begin();
 }
 
 void loop() {
@@ -156,6 +168,7 @@ void loop() {
   //constMenu();
   Timers();
   FunctionalLoop();
+  BridgeTick();
 }
 
 //function to display information on menu tabs
@@ -739,6 +752,26 @@ void Timers(){
   timerSensRead.run();
   timerFan.run();
   timerMovFanDur.run();
+}
+
+void BridgeTick(){
+  BridgeClient client = server.accept();
+
+  // There is a new client?
+  if (client) {
+    // read the command
+    String command = client.readString();
+    command.trim();        //kill whitespace
+    if (command == "getht") {
+      client.print("{\"t\": ");
+      client.print(t);
+      client.print(",");
+      client.print("{\"h\":");
+      client.print(h);
+      }
+    }
+    // Close connection and free resources.
+    client.stop();
 }
 
 
