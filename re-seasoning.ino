@@ -614,7 +614,7 @@ void backlitOn(){
 void backlitOff(MillisTimer &mt){
   timerBackLit.stop();
   lcd.noBacklight();
-
+  menuLevel=0;
 }
 void runMovFan(MillisTimer &mt){
   timerFan.stop();
